@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt">
 <head>
@@ -19,23 +18,24 @@
   <script>
     // 1) Lista de números (formato internacional SEM "+")
     const phones = [
-      "351965040732",
+      "351965040732"
       // "351960131432",
       // "351960131439"
     ];
 
-    // 2) Mensagem curta (já URL-encoded)
-    const msg = "Ol%C3%A1%20Champomy%20quero%20participar%20do%20iPhone%2017%20Pro%20MAX";
+    // 2) Texto base (não-encodado) -> será encodado dinamicamente
+    const rawMsg = "Champomy quero aprender a fazer de 50 a 150 eur por dia";
 
     // 3) Round-robin por sessão (para distribuir contatos)
     function pickPhone() {
+      if (!phones.length) return null; // proteção extra
       try {
         const k = "wa_rr_index";
         const i = Number(sessionStorage.getItem(k) || "0");
         const next = phones[i % phones.length];
         sessionStorage.setItem(k, String(i + 1));
         return next;
-      } catch { // se bloquear storage, cai no random
+      } catch {
         return phones[Math.floor(Math.random() * phones.length)];
       }
     }
@@ -43,6 +43,8 @@
     // 4) Monta links (app + web como fallback)
     function buildLinks() {
       const phone = pickPhone();
+      if (!phone) return { app: null, web: null };
+      const msg = encodeURIComponent(rawMsg); // <- FALTAVA ISTO
       return {
         app: `whatsapp://send?phone=${phone}&text=${msg}`,
         web: `https://wa.me/${phone}?text=${msg}`
@@ -53,37 +55,46 @@
     function redirect() {
       const { app, web } = buildLinks();
       const a = document.getElementById("manual");
-      a.href = web; // link manual sempre aponta p/ web
-      let opened = false;
 
-      // tenta app
+      if (!web) {
+        a.textContent = "WhatsApp indisponível";
+        a.setAttribute("aria-disabled", "true");
+        return;
+      }
+
+      a.href = web; // link manual sempre aponta p/ web
+      a.rel = "noopener noreferrer";
+
+      let opened = false;
       const t = setTimeout(() => {
         if (!opened) location.href = web;
       }, 800);
 
-      // alguns browsers bloqueiam, mas não custa tentar
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = app;
-      document.body.appendChild(iframe);
+      // tenta app via iframe (pode ser bloqueado em alguns browsers)
+      try {
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = app;
+        document.body.appendChild(iframe);
+      } catch {
+        // se o iframe falhar, vai direto para o web
+        location.href = web;
+      }
 
-      // se o app abrir, geralmente a página perde foco rapidamente
-      window.addEventListener("blur", () => {
-        opened = true;
-        clearTimeout(t);
-      }, { once: true });
+      // se o app abrir, a página normalmente perde o foco
+      const markOpened = () => { opened = true; clearTimeout(t); };
+      window.addEventListener("blur", markOpened, { once: true });
+      window.addEventListener("pagehide", markOpened, { once: true });
     }
 
-    window.addEventListener("load", () => {
-      redirect();
-    });
+    window.addEventListener("load", redirect);
   </script>
 </head>
 <body>
   <div class="box">
     <h1>Um momento…</h1>
     <p>Estamos a encaminhar-te para um representante no WhatsApp.</p>
-    <a id="manual" class="btn" href="#">Abrir no WhatsApp</a>
+    <a id="manual" class="btn" href="#" rel="noopener">Abrir no WhatsApp</a>
     <small>Se não redirecionar automaticamente, clica no botão.</small>
   </div>
 </body>
